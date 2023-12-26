@@ -38,6 +38,7 @@ func main() {
 		panic(err)
 	}
 	defer dir.Close()
+	uploaderControl := make(chan struct{}, 100)
 	for {
 		files, err := dir.Readdir(1)
 		if err != nil {
@@ -47,18 +48,20 @@ func main() {
 			fmt.Printf("Failed to read directory: %s\n", err)
 		}
 		waitGroup.Add(1)
-		go uploadFile(files[0].Name())
+		uploaderControl <- struct{}{}
+		go uploadFile(files[0].Name(), uploaderControl)
 	}
 	waitGroup.Wait()
 }
 
-func uploadFile(filename string) {
+func uploadFile(filename string, uploadControl <-chan struct{}) {
 	defer waitGroup.Done()
 	completeFileName := fmt.Sprintf("./tmp/%s", filename)
 	fmt.Printf("Uploading file %s to bucket %s\n", completeFileName, s3Bucket)
 	file, err := os.Open(completeFileName)
 	if err != nil {
 		fmt.Printf("Failed to open file %s\n", completeFileName)
+		<-uploadControl
 		return
 	}
 	defer file.Close()
@@ -67,6 +70,7 @@ func uploadFile(filename string) {
 		Key:    aws.String(filename),
 		Body:   file,
 	})
+	<-uploadControl
 	if err != nil {
 		fmt.Printf("Failed to upload file %s\n", completeFileName)
 		return
