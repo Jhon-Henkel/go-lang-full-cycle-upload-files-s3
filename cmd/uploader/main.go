@@ -8,21 +8,22 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"io"
 	"os"
+	"sync"
 )
 
 var (
-	s3Client *s3.S3
-	s3Bucket string
+	s3Client  *s3.S3
+	s3Bucket  string
+	s3Id      string = "INSERT_YOUR_AWS_ID_HERE"
+	s3Secret  string = "INSERT_YOUR_AWS_SECRET_HERE"
+	s3Token   string = "INSERT_YOUR_AWS_TOKEN_HERE"
+	waitGroup sync.WaitGroup
 )
 
 func init() {
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1"),
-		Credentials: credentials.NewStaticCredentials(
-			"id",
-			"secret",
-			"",
-		),
+		Region:      aws.String("us-east-1"),
+		Credentials: credentials.NewStaticCredentials(s3Id, s3Secret, s3Token),
 	})
 	if err != nil {
 		panic(err)
@@ -45,11 +46,14 @@ func main() {
 			}
 			fmt.Printf("Failed to read directory: %s\n", err)
 		}
-		uploadFile(files[0].Name())
+		waitGroup.Add(1)
+		go uploadFile(files[0].Name())
 	}
+	waitGroup.Wait()
 }
 
 func uploadFile(filename string) {
+	defer waitGroup.Done()
 	completeFileName := fmt.Sprintf("./tmp/%s", filename)
 	fmt.Printf("Uploading file %s to bucket %s\n", completeFileName, s3Bucket)
 	file, err := os.Open(completeFileName)
